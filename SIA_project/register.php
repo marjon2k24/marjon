@@ -76,8 +76,8 @@ $conn->close();
             <label for="role">Role:</label>
             <select name="role" required>
                 <option value="user">User</option>
-                <option value="admin">Admin</option>
-                <option value="superuser">Superuser</option> 
+                <!-- <option value="admin">Admin</option>
+                <option value="superuser">Superuser</option>  -->
             </select><br><br>
 
             <input type="submit" value="Register">

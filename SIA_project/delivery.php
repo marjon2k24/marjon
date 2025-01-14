@@ -1,72 +1,89 @@
 <?php
 session_start();
+include 'connection.php';
 
-// Check if the user is logged in and has the 'admin' role
-if (!isset($_SESSION['username']) || $_SESSION['role'] !== 'admin') {
+// Check if the user is logged in and has the 'admin' or 'superuser' role
+if (!isset($_SESSION['username']) || !in_array($_SESSION['role'], ['admin', 'superuser'])) {
     header("location: ../login.php");
     exit();
 }
 
-include 'connection.php';
+// Handle form submissions for marking PO as delivered and generating delivery receipt
+if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    if (isset($_POST['mark_delivered'])) {
+        $po_id = $_POST['po_id'];
 
-// Get the req_id from the URL parameter
-if (isset($_GET['req_id'])) {
-    $req_id = filter_var($_GET['req_id'], FILTER_SANITIZE_NUMBER_INT);
+        // Update PO status to 'delivered'
+        $sql = "UPDATE purchase_orders SET status = 'delivered' WHERE po_id = ?";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("i", $po_id);
 
-    // Fetch requisition details
-    $sql = "SELECT r.*, u.username 
-            FROM requisitions r
-            INNER JOIN users u ON r.req_user_id = u.id
-            WHERE r.req_id = ?";
-    $stmt = $conn->prepare($sql);
-    $stmt->bind_param("i", $req_id);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    $req_row = $result->fetch_assoc();
-    $stmt->close();
-
-    if (!$req_row) {
-        $error_message = "Requisition not found.";
+        if ($stmt->execute()) {
+            // Redirect to generate delivery receipt
+            header("Location: delivery_receipt.php?po_id=" . $po_id);
+            exit();
+        } else {
+            $error_message = "Error marking PO as delivered: " . $stmt->error;
+        }
     }
-} else {
-    $error_message = "Invalid request.";
 }
 
-// Handle delivery confirmation
-if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['confirm_delivery'])) {
-    // Update requisition status to 'delivered'
-    $sql = "UPDATE requisitions SET req_status = 'delivered' WHERE req_id = ?";
-    $stmt = $conn->prepare($sql);
-    $stmt->bind_param("i", $req_id);
-
-    if ($stmt->execute()) {
-        // Redirect to delivery_receipt.php to generate and display the receipt in the same tab
-        header("Location: delivery_receipt.php?req_id=" . $req_id); 
-        exit(); 
-    } else {
-        $error_message = "Error confirming delivery: " . $stmt->error;
-    }
-    $stmt->close();
-}
+// Fetch approved and delivered POs
+$approved_pos = $conn->query("
+    SELECT po.*, s.supplier_name
+    FROM purchase_orders po
+    JOIN suppliers s ON po.supplier_id = s.supplier_id
+    WHERE po.status IN ('approved', 'delivered') 
+    ORDER BY po.created_at DESC
+");
 ?>
 
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Delivery Confirmation</title>
-    <button onclick="location.href='welcome.php'">Home</button>
+    <title>Delivery Management</title>
     <style>
-        body { font-family: Arial; background: #f4f4f4; color: #333; }
-        .container { width: 600px; margin: 50px auto; background: white; padding: 20px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-        h2 { text-align: center; color: #333; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        .error { color: red; margin-bottom: 10px; }
-        .success { color: green; margin-bottom: 10px; }
-        .confirm-btn {
-            background-color: #4CAF50;
+        /* Add your CSS styles here */
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        h1, h2 {
+            text-align: center;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f0f0f5;
+        }
+
+        .btn {
+            background-color: #007bff;
             color: white;
-            padding: 10px 20px;
+            padding: 8px 12px;
             border: none;
             border-radius: 4px;
             cursor: pointer;
@@ -75,54 +92,47 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['confirm_delivery'])) {
 </head>
 <body>
     <div class="container">
-        <h2>Delivery Confirmation</h2>
+        <button onclick="location.href='welcome.php'">Home</button>
+        <h1>Delivery Management</h1>
+
+        <?php if (isset($success_message)): ?>
+            <div style="color: green;"><?php echo $success_message; ?></div>
+        <?php endif; ?>
 
         <?php if (isset($error_message)): ?>
-            <p class="error"><?= htmlspecialchars($error_message) ?></p>
+            <div style="color: red;"><?php echo $error_message; ?></div>
         <?php endif; ?>
 
-        <?php if (isset($req_row)): ?>
-            <h3>Requisition Details</h3>
-            <table>
+        <h2>Purchase Orders</h2>
+        <table>
+            <tr>
+                <th>PO Number</th>
+                <th>Supplier</th>
+                <th>Total Amount</th>
+                <th>Status</th>
+                <th>Created At</th>
+                <th>Actions</th>
+            </tr>
+            <?php while ($po = $approved_pos->fetch_assoc()): ?>
                 <tr>
-                    <th>Requisition ID:</th>
-                    <td><?= htmlspecialchars($req_row['req_id']) ?></td>
+                    <td><?php echo htmlspecialchars($po['po_number']); ?></td>
+                    <td><?php echo htmlspecialchars($po['supplier_name']); ?></td>
+                    <td><?php echo number_format($po['total_amount'], 2); ?></td>
+                    <td><?php echo htmlspecialchars($po['status']); ?></td>
+                    <td><?php echo htmlspecialchars($po['created_at']); ?></td>
+                    <td>
+                        <?php if ($po['status'] == 'approved'): ?>
+                            <form method="POST" style="display: inline;">
+                                <input type="hidden" name="po_id" value="<?php echo $po['po_id']; ?>">
+                                <button type="submit" name="mark_delivered" class="btn">Approve delivery</button>
+                            </form>
+                        <?php elseif ($po['status'] == 'delivered'): ?>
+                            <a href="delivery_receipt.php?po_id=<?php echo $po['po_id']; ?>">View Receipt</a>
+                        <?php endif; ?>
+                    </td>
                 </tr>
-                <tr>
-                    <th>Username:</th>
-                    <td><?= htmlspecialchars($req_row['username']) ?></td>
-                </tr>
-                <tr>
-                    <th>Item Name:</th>
-                    <td><?= htmlspecialchars($req_row['req_item_name']) ?></td>
-                </tr>
-                <tr>
-                    <th>Quantity:</th>
-                    <td><?= htmlspecialchars($req_row['req_quantity']) ?></td>
-                </tr>
-                <tr>
-                    <th>Unit:</th>
-                    <td><?= htmlspecialchars($req_row['req_unit']) ?></td>
-                </tr>
-                <tr>
-                    <th>Class:</th>
-                    <td><?= htmlspecialchars($req_row['req_class']) ?></td>
-                </tr>
-                <tr>
-                    <th>Date:</th>
-                    <td><?= htmlspecialchars($req_row['req_date']) ?></td>
-                </tr>
-            </table>
-
-            <?php if ($req_row['req_status'] == 'approved'): ?>
-                <form method="post" action="delivery_receipt.php?req_id=<?= htmlspecialchars($req_row['req_id']) ?>">
-                    <button type="submit" name="confirm_delivery" class="confirm-btn">Confirm Delivery</button>
-                </form>
-            <?php elseif ($req_row['req_status'] == 'delivered'): ?>
-                <p>This requisition has been delivered.</p>
-            <?php endif; ?>
-
-        <?php endif; ?>
+            <?php endwhile; ?>
+        </table>
     </div>
 </body>
 </html>

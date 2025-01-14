@@ -59,8 +59,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['action'])) {
             }
             $update_inventory_stmt->close();
 
-            // Approve requisition
-            $sql = "UPDATE requisitions SET req_status = 'approved' WHERE req_id = ?";
+            // Approve requisition and set status to 'delivering'
+            $sql = "UPDATE requisitions SET req_status = 'delivering' WHERE req_id = ?";
             $approve_stmt = $conn->prepare($sql);
             $approve_stmt->bind_param("i", $req_id);
             
@@ -107,16 +107,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['action'])) {
 
 // Fetch all requisitions, grouped by username and ordered by date
 $sql = "SELECT r.*, u.username, 
-                CASE 
-                    WHEN r.req_item_name = 'rubberbond' THEN '-'
-                    WHEN r.req_class = 'class_a' THEN 'A'
-                    WHEN r.req_class = 'class_b' THEN 'B'
-                    WHEN r.req_class = 'class_c' THEN 'C'
-                    ELSE r.req_class 
-                END AS req_class_display
-            FROM requisitions r
-            INNER JOIN users u ON r.req_user_id = u.id
-            ORDER BY u.username, r.req_date DESC"; 
+            CASE 
+                WHEN r.req_item_name = 'rubberbond' THEN '-'
+                WHEN r.req_class = 'class_a' THEN 'A'
+                WHEN r.req_class = 'class_b' THEN 'B'
+                WHEN r.req_class = 'class_c' THEN 'C'
+                ELSE r.req_class 
+            END AS req_class_display
+        FROM requisitions r
+        INNER JOIN users u ON r.req_user_id = u.id
+        ORDER BY u.username, r.req_date DESC"; 
 $result = $conn->query($sql);
 
 ?>
@@ -138,7 +138,7 @@ $result = $conn->query($sql);
             display: block;
             margin-top: 20px;
             padding: 10px 20px;
-            background-color:rgb(21, 174, 59); 
+            background-color: #dc3545; 
             color: white;
             border: none;
             text-decoration: none; 
@@ -207,7 +207,7 @@ $result = $conn->query($sql);
                                         <input type="hidden" name="req_id" value="<?= $row['req_id'] ?>">
                                         <button type="submit" name="action" value="decline">Decline</button>
                                     </form>
-                                <?php elseif ($row['req_status'] == 'approved'): ?>
+                                <?php elseif ($row['req_status'] == 'approved'): ?> 
                                     <a href="delivery.php?req_id=<?= $row['req_id'] ?>">Proceed to Delivery</a>
                                 <?php else: ?>
                                     <?= htmlspecialchars($row['req_status']) ?> 

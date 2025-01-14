@@ -110,29 +110,34 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $sql = "UPDATE purchase_orders SET status = ?, approved_by = ? WHERE po_id = ?";
         $stmt = $conn->prepare($sql);
         $stmt->bind_param("sii", $status, $approved_by, $po_id);
-        $stmt->execute();
 
-        // If approved, update inventory
-        if ($status == 'approved') {
-            // Get PO items
-            $sql = "SELECT * FROM po_items WHERE po_id = ?";
-            $stmt = $conn->prepare($sql);
-            $stmt->bind_param("i", $po_id);
-            $stmt->execute();
-            $po_items_result = $stmt->get_result();
+        if ($stmt->execute()) {
+            if ($status == 'approved') {
+                // Redirect to generate purchasing receipt
+                header("Location: purchasing_receipt.php?po_id=" . $po_id); 
+                exit();
+            } 
+        } else {
+            $error_message = "Error updating purchase order: " . $stmt->error;
+        }
+        $stmt->close();
+    }
 
-            while ($item = $po_items_result->fetch_assoc()) {
-                $item_name = $item['item_name'];
-                $quantity = $item['quantity'];
+    // Handle mark as delivered action
+    if (isset($_POST['mark_delivered'])) {
+        $po_id = $_POST['po_id'];
 
-                // Update inventory (add the purchased quantity)
-                $update_inventory_sql = "UPDATE Inventory 
-                                         SET quantity = quantity + ? 
-                                         WHERE item_name = ?";
-                $update_stmt = $conn->prepare($update_inventory_sql);
-                $update_stmt->bind_param("is", $quantity, $item_name);
-                $update_stmt->execute(); 
-            }
+        // Update PO status to 'delivered'
+        $sql = "UPDATE purchase_orders SET status = 'delivered' WHERE po_id = ?";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("i", $po_id);
+
+        if ($stmt->execute()) {
+            // Redirect to generate delivery receipt
+            header("Location: delivery_receipt.php?po_id=" . $po_id);
+            exit();
+        } else {
+            $error_message = "Error marking PO as delivered: " . $stmt->error;
         }
     }
 }
@@ -311,7 +316,9 @@ $pos = $conn->query("
                 </tr>
             <?php endwhile; ?>
         </table>
-        <button onclick="location.href='delivery.php'" class="delivery-btn">Delivery</button>
+
+        <button onclick="location.href='delivery.php'" class="delivery-btn">Delivery</button> 
+        <button onclick="location.href='purchasing_receipt.php'" class="delivery-btn">History</button> 
     </div>
 </body>
 </html>

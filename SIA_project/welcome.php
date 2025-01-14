@@ -55,7 +55,7 @@ $result = $conn->query("SELECT * FROM users WHERE approved=1");
             <a href="inventory.php">Inventory</a>
             <a href="purchasing.php">purchasing</a>
             <a href="supplier.php">Supplier</a>
-            <a href="delivery.php">delivery</a>
+            <a href="delivery_receipt.php">delivery</a>
             <a href="logout.php">Logout</a>
         <?php endif; ?>
     </nav>
